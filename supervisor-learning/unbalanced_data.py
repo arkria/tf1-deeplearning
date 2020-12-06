@@ -2,6 +2,7 @@ import tensorflow as tf
 import pandas as pd
 import numpy as np
 from utils.evaluator import *
+from sklearn.preprocessing import OneHotEncoder
 
 import os
 
@@ -56,21 +57,28 @@ def build_graph(input_dim):
 
     x = tf.placeholder(tf.float32, [None, input_dim], name='x-input')
     y_ = tf.placeholder(tf.int64, [None, ], name='y-input')
+    y_onehot_ = tf.placeholder(tf.float32, [None, 2], name='y-onehot')
 
     out_fc1 = tf.nn.relu(fc(input_dim, 20, x, 'fc1'))
     out_fc2 = tf.nn.relu(fc(20, 10, out_fc1, 'fc2'))
 
-    y = tf.nn.softmax(fc(10, 2, out_fc2, 'fc3'), name='softmax-output')
+    # y = tf.nn.softmax(fc(10, 2, out_fc2, 'fc3'), name='softmax-output')
+    y = fc(10, 2, out_fc2, 'fc3')
 
-    pred  = tf.argmax(y, 1, name='pred')
+    pred = tf.argmax(y, 1, name='pred')
 
-    loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=y, labels=y_))
+    # loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=y, labels=y_))
+    # loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=y, labels=y_onehot_))
+    loss = tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(logits=y, labels=y_onehot_, pos_weight=5.0))
+
+
+
     opt = tf.train.AdamOptimizer(lr).minimize(loss)
 
     correct_prediction = tf.equal(pred, y_)
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-    return {'x_input': x, 'y_input': y_, 'softmax-output': y, 'pred': pred, 'loss': loss,
+    return {'x_input': x, 'y_input': y_, 'y_onehot': y_onehot_, 'softmax-output': y, 'pred': pred, 'loss': loss,
             'optimization': opt, 'accuracy': accuracy}
 
 
@@ -80,8 +88,8 @@ epochs = 30
 
 if __name__ == '__main__':
 
-    dftrain_raw = pd.read_csv('../data/titanic/train.csv')
-    dftest_raw = pd.read_csv('../data/titanic/test.csv')
+    dftrain_raw = pd.read_csv('../data/unbalanced/train.csv')
+    dftest_raw = pd.read_csv('../data/unbalanced/test.csv')
     x_train = preprocessing(dftrain_raw)
     x_test = preprocessing(dftest_raw)
     y_train = dftrain_raw['Survived'].values
@@ -102,15 +110,17 @@ if __name__ == '__main__':
             while 1:
                 feature, label = sess.run([features, labels])
                 print(label.shape)
+                label_onehot = OneHotEncoder(sparse=False).fit_transform(label.reshape(-1, 1))
                 _, acc, loss = sess.run([graph['optimization'], graph['accuracy'], graph['loss']],
-                     feed_dict={graph['x_input']: feature, graph['y_input']: label})
+                     feed_dict={graph['x_input']: feature, graph['y_input']: label, graph['y_onehot']: label_onehot})
                 print("epoch [{:>2}/{}], iter [{:>2}/{}], loss {:.4f}, accuracy {:.4f}".
                       format(epoch, epochs, i, train_size // bz, loss, acc))
                 i += 1
                 if i % (train_size // bz) == 0 and i > 0:
                     break
 
-        y_pred, acc_test = sess.run([graph['pred'], graph['accuracy']], feed_dict={graph['x_input']: x_test, graph['y_input']: y_test})
+        y_test_onehot = OneHotEncoder(sparse=False).fit_transform(y_test.reshape(-1, 1))
+        y_pred, acc_test = sess.run([graph['pred'], graph['accuracy']], feed_dict={graph['x_input']: x_test, graph['y_input']: y_test, graph['y_onehot']: label_onehot})
         print("test accuracy: {:.4f}".format(acc_test))
 
         # for i in range(10):
@@ -119,4 +129,5 @@ if __name__ == '__main__':
         #     i += 1
         #     if i % (train_size // bz) == 0 and i > 0:
         #         sess.run(iterator.initializer)
+        print(y_pred)
         perf_evaluate(y_test, y_pred)
