@@ -59,11 +59,13 @@ def build_graph(input_dim):
     y_ = tf.placeholder(tf.int64, [None, ], name='y-input')
     y_onehot_ = tf.placeholder(tf.float32, [None, 2], name='y-onehot')
 
-    out_fc1 = tf.nn.relu(fc(input_dim, 20, x, 'fc1'))
-    out_fc2 = tf.nn.relu(fc(20, 10, out_fc1, 'fc2'))
+    out_fc1 = tf.nn.relu(fc(input_dim, 100, x, 'fc1'))
+    out_fc2 = tf.nn.relu(fc(100, 20, out_fc1, 'fc2'))
+    out_fc3 = tf.nn.relu(fc(20, 20, out_fc2, 'fc2.1'))
+    out_fc4 = tf.nn.relu(fc(20, 20, out_fc3, 'fc2.2'))
 
     # y = tf.nn.softmax(fc(10, 2, out_fc2, 'fc3'), name='softmax-output')
-    y = fc(10, 2, out_fc2, 'fc3')
+    y = fc(20, 2, out_fc4, 'fc3')
 
     pred = tf.argmax(y, 1, name='pred')
 
